@@ -44,16 +44,16 @@ contract DogeWorld is Context, IERC20, Sanction {
     string private _symbol = "DOGEWORLD";
     uint8 private _decimals = 9;
     
-    uint256 public _taxFee = 2;
+    uint256 public _taxFee = 1;
     uint256 private _previousTaxFee = _taxFee;
     
-    uint256 public _liquidityFee = 2;
+    uint256 public _liquidityFee = 1;
     uint256 private _previousLiquidityFee = _liquidityFee;
 
-    uint256 public _burnFee = 2;
+    uint256 public _burnFee = 1;
     uint256 private _previousburnFee = _burnFee;
 
-    uint256 public _communityFee = 1;
+    uint256 public _communityFee = 2;
     uint256 private _previousCommunityFee = _communityFee;
 
     uint256 public _charityFee = 1;
@@ -72,10 +72,10 @@ contract DogeWorld is Context, IERC20, Sanction {
     
     bool inSwapAndLiquify;
     bool public swapAndLiquifyEnabled = true;
-    bool public autoSellForCommunity = true;
+    bool public autoSellForCommunity = false;
     bool public autoSellForCharity = true;
     bool public autoAddToLiquidity = true;
-    bool public swapForBNB = true;
+    bool public swapForBNB = false;
         
     uint256 public _maxTxAmount = 1000 * 10**6 * 10**9;
     
@@ -96,7 +96,7 @@ contract DogeWorld is Context, IERC20, Sanction {
         inSwapAndLiquify = false;
     }
     
-    constructor (address _owner1, address _owner2, address _owner3, address _owner4, address communityAddress, address charityAddress, address liquidityAddress, address swapForwardAddress)  public Sanction(_owner1, _owner2, _owner3, _owner4)  {
+    constructor (address _owner1, address _owner2, address _owner3, address _owner4, address communityAddress, address charityAddress, address liquidityAddress, address swapForwardAddress, uint256 requiredVotes)  public Sanction(_owner1, _owner2, _owner3, _owner4, requiredVotes)  {
         
         
         _liquidityAddress = liquidityAddress;
@@ -123,8 +123,6 @@ contract DogeWorld is Context, IERC20, Sanction {
         
         // Exlude deployer from fee
         _isExcludedFromFee[_owner1] = true;
-        
-        
         
         emit Transfer(address(0), _owner1, _tTotal);   
         
@@ -223,7 +221,7 @@ contract DogeWorld is Context, IERC20, Sanction {
 
     function transferFrom(address sender, address recipient, uint256 amount) public override returns (bool) {
         _transfer(sender, recipient, amount);
-        _approve(sender, _msgSender(), _allowances[sender][_msgSender()].sub(amount, "ERC20: transfer amount exceeds allowance"));
+        _approve(sender, _msgSender(), _allowances[sender][_msgSender()].sub(amount, "ERC20: amount exceeds allowance"));
         return true;
     }
 
@@ -247,7 +245,7 @@ contract DogeWorld is Context, IERC20, Sanction {
 
     function deliver(uint256 tAmount) public {
         address sender = _msgSender();
-        require(!_isExcluded[sender], "Excluded addresses cannot call this function");
+        require(!_isExcluded[sender], "excluded");
         (uint256 rAmount,,,,,,) = _getValues(tAmount);
         _rOwned[sender] = _rOwned[sender].sub(rAmount);
         _rTotal = _rTotal.sub(rAmount); // 
@@ -255,7 +253,7 @@ contract DogeWorld is Context, IERC20, Sanction {
     }
 
     function reflectionFromToken(uint256 tAmount, bool deductTransferFee) public view returns(uint256) {
-        require(tAmount <= _tTotal, "Amount must be less than supply");
+        require(tAmount <= _tTotal, "Amount < supply");
         if (!deductTransferFee) {
             (uint256 rAmount,,,,,,) = _getValues(tAmount);
             return rAmount;
@@ -266,14 +264,14 @@ contract DogeWorld is Context, IERC20, Sanction {
     }
 
     function tokenFromReflection(uint256 rAmount) public view returns(uint256) {
-        require(rAmount <= _rTotal, "Amount must be less than total reflections");
+        require(rAmount <= _rTotal, "Amount < reflections");
         uint256 currentRate =  _getRate();
         return rAmount.div(currentRate);
     }
 
     function excludeFromReward(address account) public onlyOwners() {
         // require(account != 0x7a250d5630B4cF539739dF2C5dAcb4c659F2488D, 'We can not exclude Uniswap router.');
-        require(!_isExcluded[account], "Account is already excluded");
+        require(!_isExcluded[account], "excluded");
         if(hasApprovalAddress(uint(ActionType.excludeFromReward), account)){
             if(_rOwned[account] > 0) {
                 _tOwned[account] = tokenFromReflection(_rOwned[account]);
@@ -284,7 +282,7 @@ contract DogeWorld is Context, IERC20, Sanction {
     }
 
     function includeInReward(address account) external onlyOwners() {
-        require(_isExcluded[account], "Account is already excluded");
+        require(_isExcluded[account], "excluded");
         if(hasApprovalAddress(uint(ActionType.includeInReward), account)){
             for (uint256 i = 0; i < _excluded.length; i++) {
                 if (_excluded[i] == account) {
@@ -311,50 +309,49 @@ contract DogeWorld is Context, IERC20, Sanction {
     }
     
     function setTaxFeePercent(uint256 taxFee) external onlyOwners() {
-        require((taxFee + _liquidityFee + _charityFee + _communityFee + _burnFee) <= 10, "Fee needs to be in allowable range");
+        require((taxFee + _liquidityFee + _charityFee + _communityFee + _burnFee) <= 10, ">Max");
         if(hasApprovalUint(uint(ActionType.setTaxFeePercent), taxFee)){
             _taxFee = taxFee;
         }
     }
     
     function setLiquidityFeePercent(uint256 liquidityFee) external onlyOwners() {
-        require((_taxFee + liquidityFee + _charityFee + _communityFee + _burnFee) <= 10, "Fee needs to be in allowable range");
+        require((_taxFee + liquidityFee + _charityFee + _communityFee + _burnFee) <= 10, ">Max");
         if(hasApprovalUint(uint(ActionType.setLiquidityFeePercent), liquidityFee)){
             _liquidityFee = liquidityFee;
         }
     }    
 
     function setCharityFeePercent(uint256 charityFee) external onlyOwners() {
-        require((_taxFee + _liquidityFee + charityFee + _communityFee + _burnFee) <= 10, "Fee needs to be in allowable range");
+        require((_taxFee + _liquidityFee + charityFee + _communityFee + _burnFee) <= 10, ">Max");
         if(hasApprovalUint(uint(ActionType.setCharityFeePercent), charityFee)){
             _charityFee = charityFee;
         }
     }
 
     function setCommunityFeePercent(uint256 communityFee) external onlyOwners() {
-        require((_taxFee + _liquidityFee + _charityFee + communityFee + _burnFee) <= 10, "Fee needs to be in allowable range");
+        require((_taxFee + _liquidityFee + _charityFee + communityFee + _burnFee) <= 10, ">Max");
         if(hasApprovalUint(uint(ActionType.setCommunityFeePercent), communityFee)){
             _communityFee = communityFee;
         }
     }
     
-    
     function setBurnFeePercent(uint256 burnFee) external onlyOwners {
-        require((_taxFee + _liquidityFee + _charityFee + _communityFee + burnFee) <= 10, "Fee needs to be in allowable range");
+        require((_taxFee + _liquidityFee + _charityFee + _communityFee + burnFee) <= 10, ">Max");
         if(hasApprovalUint(uint(ActionType.setBurnFeePercent), burnFee)){
             _burnFee = burnFee;    
         }
     }
 
     function setCommunityAddress(address communityAddress) external onlyOwners() {
-        require(!contains(communityAddress), "Prohibit setting to existing holders");
+        require(!contains(communityAddress), "!Existing");
         if(hasApprovalAddress(uint(ActionType.setCommunityAddress), communityAddress)){
             _communityAddress = communityAddress;
         }
     }
     
     function setCharityAddress(address charityAddress) external onlyOwners() {
-        require(!contains(charityAddress), "Prohibit setting to existing holders");
+        require(!contains(charityAddress), "!Existing");
         if(hasApprovalAddress(uint(ActionType.setCharityAddress), charityAddress)){
             _charityAddress = charityAddress;
         }
@@ -381,7 +378,7 @@ contract DogeWorld is Context, IERC20, Sanction {
         }
     }
 
-    function setSwapAndLiquifyEnabled(bool _enabled) public onlyOwners {
+    function setSwapAndLiquifyEnabled(bool _enabled) external onlyOwners {
         if(hasApprovalBool(uint(ActionType.setSwapAndLiquifyEnabled), _enabled)){
             swapAndLiquifyEnabled = _enabled;
             emit SwapAndLiquifyEnabledUpdated(_enabled);
@@ -389,25 +386,25 @@ contract DogeWorld is Context, IERC20, Sanction {
     }
 
     function setNumTokensSellToAddToLiquidity(uint256 _numTokensSellToAddToLiquidity) external onlyOwners() {
-        require(_numTokensSellToAddToLiquidity <= _maxTxAmount, "Value needs to be in allowable range");
+        require(_numTokensSellToAddToLiquidity <= _maxTxAmount, "out of range");
         if(hasApprovalUint(uint(ActionType.setNumTokensSellToAddToLiquidity), _numTokensSellToAddToLiquidity)){
             numTokensSellToAddToLiquidity = _numTokensSellToAddToLiquidity;
         }
     }
 
-    function setAutoSellForCommunity(bool _enabled) public onlyOwners {
+    function setAutoSellForCommunity(bool _enabled) external onlyOwners {
         if(hasApprovalBool(uint(ActionType.setAutoSellForCommunity), _enabled)){
             autoSellForCommunity = _enabled;            
         }        
     }
 
-    function setAutoSellForCharity(bool _enabled) public onlyOwners {
+    function setAutoSellForCharity(bool _enabled) external onlyOwners {
         if(hasApprovalBool(uint(ActionType.setAutoSellForCharity), _enabled)){
             autoSellForCharity = _enabled;            
         }        
     }
     
-    function setAutoAddToLiquidity(bool _enabled) public onlyOwners {
+    function setAutoAddToLiquidity(bool _enabled) external onlyOwners {
         if(hasApprovalBool(uint(ActionType.setAutoAddToLiquidity), _enabled)){
             autoAddToLiquidity = _enabled;            
         }        
@@ -424,7 +421,6 @@ contract DogeWorld is Context, IERC20, Sanction {
         if(hasApproval(uint(ActionType.withdrawFromCharity), _sendTo, _amount)){
             _tokenTransfer(_charityAddress, _sendTo, _amount, false);
         }
-        
     }
     
     function withdrawFromCommunity(address _sendTo, uint256 _amount) public onlyOwners {
@@ -612,9 +608,7 @@ contract DogeWorld is Context, IERC20, Sanction {
         uint256 communityAmount = amount.mul(_communityFee).div(totalFee);
         uint256 charityAmount = amount.mul(_charityFee).div(totalFee);
         uint256 twoFeeAmount = communityAmount.add(charityAmount);
-        
-        uint256 liquidityAmount;        
-        
+        uint256 liquidityAmount;  
         
         if(amount > twoFeeAmount){
             liquidityAmount = amount.sub(twoFeeAmount);            
@@ -639,7 +633,7 @@ contract DogeWorld is Context, IERC20, Sanction {
                     swapTokensForTokens(communityAmount, _communityAddress);
                 }
             }
-            else{
+            else {
                 _tokenTransfer(address(this), _communityAddress, communityAmount, false);
             }
         }
@@ -653,7 +647,7 @@ contract DogeWorld is Context, IERC20, Sanction {
                     swapTokensForTokens(charityAmount, _charityAddress);
                 }
             }
-            else{
+            else {
                 _tokenTransfer(address(this), _charityAddress, charityAmount, false);
             }
         }
@@ -730,7 +724,6 @@ contract DogeWorld is Context, IERC20, Sanction {
             block.timestamp
         );
     } 
-   
 
     //this method is responsible for taking all fee, if takeFee is true
     function _tokenTransfer(address sender, address recipient, uint256 amount,bool takeFee) private {
