@@ -12,6 +12,8 @@ contract Sanction is Context {
     uint private owner3Approval = 0;
     uint private owner4Approval = 0;
 
+    uint256 private _requiredVotes = 3;
+
     address private _owner1;
     address private _owner2;
     address private _owner3;
@@ -30,12 +32,14 @@ contract Sanction is Context {
     uint private _changeOwner4 = 97;             
     uint private _lock = 98;                    
     uint private _renounceOwnership = 99;
+    uint private _changeRequiredVotes = 100;
 
-    constructor (address owner1, address owner2, address owner3, address owner4) internal {
+    constructor (address owner1, address owner2, address owner3, address owner4, uint256 requiredVotes) internal {
         _owner1 = owner1;
         _owner2 = owner2;
         _owner3 = owner3;
         _owner4 = owner4;
+        _requiredVotes = requiredVotes;
     }
 
     function owner1() public view returns (address) {
@@ -52,7 +56,7 @@ contract Sanction is Context {
     }
 
     modifier onlyOwners() {
-        require(_msgSender() == _owner1 || _msgSender() == _owner2 || _msgSender() == _owner3 || _msgSender() == _owner4, "Ownable: caller has to be one of the 4 owners");
+        require(_msgSender() == _owner1 || _msgSender() == _owner2 || _msgSender() == _owner3 || _msgSender() == _owner4, "only owners");
         _;
     }
     
@@ -78,24 +82,23 @@ contract Sanction is Context {
         bool approved = (approveFunction == uint(action) && approveAddress == value1 && approveUint256 == value2);
         uint voteCount = owner1Approval + owner2Approval + owner3Approval + owner4Approval;
         
-        if(approved && voteCount >= 3){
+        if(approved && voteCount >= _requiredVotes){
             result = true;
             resetApproval();
         }
-        
-        result;
+        return result;
     }
     
     function hasApprovalAddress(uint action, address value) internal returns (bool) {
         bool result = false;
         bool approved = (approveFunction == uint(action) && approveAddress == value);
         uint voteCount = owner1Approval + owner2Approval + owner3Approval + owner4Approval;
-        if(approved && voteCount >= 3)
+        if(approved && voteCount >= _requiredVotes)
         {
             result = true;
             resetApproval();
         }
-        result;
+        return result;
     }
 
     function hasApprovalUint(uint action, uint256 value) internal returns (bool) {
@@ -103,24 +106,24 @@ contract Sanction is Context {
         bool approved = (approveFunction == uint(action) && approveUint256 == value);
         uint voteCount = owner1Approval + owner2Approval + owner3Approval + owner4Approval;
         
-        if(approved && voteCount >= 3)
+        if(approved && voteCount >= _requiredVotes)
         {
             result = true;
             resetApproval();
         }
-        result;
+        return result;
     }
     
     function hasApprovalBool(uint action, bool value) internal returns (bool) {
         bool result = false;
         bool approved = (approveFunction == uint(action) && approveBool == value);
         uint voteCount = owner1Approval + owner2Approval + owner3Approval + owner4Approval;
-        if(approved && voteCount >= 3)
+        if(approved && voteCount >= _requiredVotes)
         {
             result = true;
             resetApproval();
         }
-        result;
+        return result;
     }
 
     function confirmVote() private {
@@ -187,7 +190,6 @@ contract Sanction is Context {
         approveFunction = 0;
     }
 
-
     function renounceOwnership(bool agree) public onlyOwners {
         if(hasApprovalBool(_renounceOwnership, agree)){
             _owner1 = address(0);
@@ -221,6 +223,12 @@ contract Sanction is Context {
         }  
     }
 
+    function changeRequiredVotes(uint256 votes) public onlyOwners {
+        if(hasApprovalUint(_changeRequiredVotes, votes) && votes <= 4){
+            _requiredVotes = votes;
+        }  
+    }
+
     function geUnlockTime() public view returns (uint256) {
         return _lockTime;
     }
@@ -243,8 +251,8 @@ contract Sanction is Context {
     
     // Unlocks the contract for owner when _lockTime is exceeds
     function unlock() public {
-        require(_previousOwner1 == msg.sender || _previousOwner2 == msg.sender || _previousOwner3 == msg.sender || _previousOwner4 == msg.sender , "You don't have permission to unlock");
-        require(now > _lockTime , "Contract is locked until 7 days");        
+        require(_previousOwner1 == msg.sender || _previousOwner2 == msg.sender || _previousOwner3 == msg.sender || _previousOwner4 == msg.sender , "!Permissions");
+        require(now > _lockTime , "Contract locked until 7 days");        
         _owner1 = _previousOwner1;
         _owner2 = _previousOwner2;
         _owner3 = _previousOwner3;
